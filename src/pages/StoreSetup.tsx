@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,8 @@ const AD_CATEGORIES = [
 export default function StoreSetup() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  useDocumentTitle("Set up your store");
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -58,9 +61,9 @@ export default function StoreSetup() {
   // Signed-out visitors sign in first
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/auth", { state: { from: location.pathname } });
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, location.pathname]);
 
   // Each account has one store; setting it up again can only fail
   useEffect(() => {
@@ -272,12 +275,12 @@ export default function StoreSetup() {
                   {AD_CATEGORIES.map((category) => (
                     <div key={category.value} className="flex items-center space-x-2">
                       <Checkbox
-                        id={category.value}
+                        id={`ad-category-${category.value}`}
                         checked={formData.adCategories.includes(category.value)}
                         onCheckedChange={() => handleCategoryToggle(category.value)}
                       />
                       <label
-                        htmlFor={category.value}
+                        htmlFor={`ad-category-${category.value}`}
                         className="text-sm cursor-pointer"
                       >
                         {category.label}
