@@ -27,7 +27,7 @@ interface Profile {
 interface Store {
   id: string;
   store_name: string;
-  is_active: boolean;
+  is_active: boolean | null;
 }
 
 interface AdSponsor {
