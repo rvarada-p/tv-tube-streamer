@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { extractYouTubeId, youtubeEmbedUrl } from "@/lib/youtube";
+import { nextDisplayOrder } from "@/lib/content";
 import { checkUpload, UPLOAD_RULES, type UploadKind } from "@/lib/uploads";
 import { 
   ArrowLeft, 
@@ -47,6 +49,8 @@ interface Store {
 export default function StoreContent() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  useDocumentTitle("Default content");
   const { toast } = useToast();
   
   const [store, setStore] = useState<Store | null>(null);
@@ -59,12 +63,13 @@ export default function StoreContent() {
   const [title, setTitle] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/auth", { state: { from: location.pathname } });
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, location.pathname]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -122,24 +127,37 @@ export default function StoreContent() {
     setSelectedFile(null);
   }, [contentType]);
 
+  const previewUrl = useMemo(
+    () => (selectedFile?.type.startsWith("image/") ? URL.createObjectURL(selectedFile) : null),
+    [selectedFile]
+  );
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  const acceptFile = (file: File) => {
+    const problem = checkUpload(file, contentType as UploadKind);
+    if (problem) {
+      toast({ ...problem, variant: "destructive" });
+      return;
+    }
+
+    setSelectedFile(file);
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     // Reset so picking the same file again still fires onChange
     e.target.value = "";
-    if (file) {
-      const problem = checkUpload(file, contentType as UploadKind);
-      if (problem) {
-        toast({ ...problem, variant: "destructive" });
-        return;
-      }
-
-      setSelectedFile(file);
-    }
+    if (file) acceptFile(file);
   };
 
-  // One past the highest position; the count can collide after a delete
-  const nextDisplayOrder = () =>
-    contentItems.reduce((max, item) => Math.max(max, item.display_order ?? -1), -1) + 1;
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) acceptFile(file);
+  };
 
   const handleUpload = async () => {
     if (!store || !user) return;
@@ -173,7 +191,7 @@ export default function StoreContent() {
           title: title.trim() || "YouTube Video",
           content_type: "youtube",
           content_url: youtubeEmbedUrl(videoId),
-          display_order: nextDisplayOrder(),
+          display_order: nextDisplayOrder(contentItems),
         });
 
       if (error) {
@@ -234,7 +252,7 @@ export default function StoreContent() {
         title: title.trim() || selectedFile.name,
         content_type: contentType,
         content_url: urlData.publicUrl,
-        display_order: nextDisplayOrder(),
+        display_order: nextDisplayOrder(contentItems),
       });
 
     if (insertError) {
@@ -319,7 +337,10 @@ export default function StoreContent() {
     if (item.content_type !== "youtube" && item.content_url.includes("store-content")) {
       const path = item.content_url.split("store-content/")[1];
       if (path) {
-        await supabase.storage.from("store-content").remove([path]);
+        const { error: storageError } = await supabase.storage.from("store-content").remove([path]);
+        if (storageError) {
+          console.error("Error removing file from storage:", storageError);
+        }
       }
     }
 
@@ -420,11 +441,29 @@ export default function StoreContent() {
                   onChange={(e) => setYoutubeUrl(e.target.value)}
                   placeholder="https://www.youtube.com/watch?v=..."
                 />
+                {youtubeUrl.trim() &&
+                  (extractYouTubeId(youtubeUrl) ? (
+                    <img
+                      src={`https://i.ytimg.com/vi/${extractYouTubeId(youtubeUrl)}/mqdefault.jpg`}
+                      alt="Video preview"
+                      className="mt-2 w-48 rounded-md"
+                    />
+                  ) : (
+                    <p className="text-xs text-destructive">That doesn't look like a YouTube video link</p>
+                  ))}
               </div>
             ) : (
               <div className="space-y-2">
                 <Label>Upload File</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                <div
+                  className={`border-2 border-dashed rounded-lg p-6 text-center ${dragging ? "border-primary bg-primary/5" : "border-border"}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={handleDrop}
+                >
                   <input
                     type="file"
                     id="file-upload"
@@ -435,10 +474,13 @@ export default function StoreContent() {
                   <label htmlFor="file-upload" className="block cursor-pointer rounded-md peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2">
                     <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
                     {selectedFile ? (
-                      <p className="text-sm font-medium">{selectedFile.name}</p>
+                      <>
+                        {previewUrl && <img src={previewUrl} alt="" className="mx-auto mb-2 max-h-32 rounded-md" />}
+                        <p className="text-sm font-medium">{selectedFile.name}</p>
+                      </>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        Click to upload {contentType === "image" ? "an image" : "a video"}
+                        Click or drop to upload {contentType === "image" ? "an image" : "a video"}
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground mt-1">
@@ -449,7 +491,10 @@ export default function StoreContent() {
               </div>
             )}
 
-            <Button onClick={handleUpload} disabled={uploading} className="w-full sm:w-auto">
+            <Button
+              onClick={handleUpload}
+              disabled={uploading || (contentType === "youtube" ? !youtubeUrl.trim() : !selectedFile)}
+              className="w-full sm:w-auto">
               {uploading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
