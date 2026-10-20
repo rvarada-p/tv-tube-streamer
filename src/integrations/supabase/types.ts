@@ -532,6 +532,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      mark_ad_played: {
+        Args: { _schedule_id: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

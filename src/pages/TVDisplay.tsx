@@ -40,6 +40,7 @@ export default function TVDisplay() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [defaultContentIndex, setDefaultContentIndex] = useState(-1);
   const [noStore, setNoStore] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -47,6 +48,17 @@ export default function TVDisplay() {
       navigate("/tv/login");
     }
   }, [user, authLoading, navigate]);
+
+  // Track the connection for the offline badge
+  useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
 
   // Update clock
   useEffect(() => {
@@ -224,9 +236,7 @@ export default function TVDisplay() {
 
       // Mark as played
       supabase
-        .from("ad_schedule")
-        .update({ played_at: now.toISOString() })
-        .eq("id", scheduledAd.id)
+        .rpc("mark_ad_played", { _schedule_id: scheduledAd.id })
         .then(({ error }) => {
           if (error) {
             console.error("Error marking ad as played:", error);
@@ -263,6 +273,14 @@ export default function TVDisplay() {
     }
     return () => clearInterval(interval);
   }, [isPlaying, playDefaultContent, currentContent, defaultContent]);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  };
 
   // Render content based on type
   const renderContent = () => {
@@ -308,7 +326,7 @@ export default function TVDisplay() {
       if (videoId) {
         return (
           <iframe
-            src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
             className="w-full h-full"
             title={currentContent.title || "YouTube video"}
             allow="autoplay; encrypted-media"
@@ -341,7 +359,7 @@ export default function TVDisplay() {
   }
 
   return (
-    <div className="dark tv-display relative overflow-hidden cursor-none">
+    <div className="dark tv-display relative overflow-hidden cursor-none" onDoubleClick={toggleFullscreen}>
       {/* Main Content Area */}
       <div className="absolute inset-0">
         {renderContent()}
@@ -383,6 +401,13 @@ export default function TVDisplay() {
           </div>
         </div>
       </div>
+
+      {!isOnline && (
+        <div className="absolute bottom-6 left-6 glass-card px-4 py-3 flex items-center gap-3">
+          <div className="w-3 h-3 rounded-full bg-destructive" />
+          <span className="text-sm">Offline: new bookings will appear when the connection is back</span>
+        </div>
+      )}
 
       {/* Upcoming Ads Indicator */}
       {scheduledAds.length > 0 && (
