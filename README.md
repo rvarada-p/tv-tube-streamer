@@ -1,5 +1,7 @@
 # AdStation
 
+[![CI](https://github.com/rvarada-p/tv-tube-streamer/actions/workflows/ci.yml/badge.svg)](https://github.com/rvarada-p/tv-tube-streamer/actions/workflows/ci.yml)
+
 AdStation puts sponsor ads and a store's own content on the TV screens inside local stores.
 
 - **Stores** sign up, describe their store and opening hours, upload default content (images, videos, YouTube links) and see the day's ad schedule.
