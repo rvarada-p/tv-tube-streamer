@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -27,7 +28,7 @@ interface Profile {
 interface Store {
   id: string;
   store_name: string;
-  is_active: boolean;
+  is_active: boolean | null;
 }
 
 interface AdSponsor {
@@ -42,6 +43,7 @@ function ComingSoon() {
 export default function Dashboard() {
   const { user, signOut, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  useDocumentTitle("Dashboard");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [sponsor, setSponsor] = useState<AdSponsor | null>(null);
