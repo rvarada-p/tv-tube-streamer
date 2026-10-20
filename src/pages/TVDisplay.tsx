@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Tv, Loader2, Clock, Calendar, Play } from "lucide-react";
-import { format } from "date-fns";
+import { format, parse } from "date-fns";
 import { extractYouTubeId } from "@/lib/youtube";
+import { findDueAd } from "@/lib/ads";
 
 interface AdContent {
   id: string;
@@ -29,7 +31,7 @@ interface DefaultContent {
 }
 
 export default function TVDisplay() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const [currentContent, setCurrentContent] = useState<AdContent | DefaultContent | null>(null);
   const [scheduledAds, setScheduledAds] = useState<ScheduledAd[]>([]);
@@ -40,6 +42,8 @@ export default function TVDisplay() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [defaultContentIndex, setDefaultContentIndex] = useState(-1);
   const [noStore, setNoStore] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  useDocumentTitle(storeName || "TV display");
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -47,6 +51,17 @@ export default function TVDisplay() {
       navigate("/tv/login");
     }
   }, [user, authLoading, navigate]);
+
+  // Track the connection for the offline badge
+  useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
 
   // Update clock
   useEffect(() => {
@@ -208,15 +223,9 @@ export default function TVDisplay() {
   // Check for scheduled ads and play them
   const checkAndPlayAd = useCallback(() => {
     const now = new Date();
-    const currentTimeStr = now.toTimeString().slice(0, 5);
 
-    // Find an unplayed ad whose slot started in the last 2 minutes, so a late
-    // or restarted check still plays it
-    const graceStartStr = new Date(now.getTime() - 2 * 60 * 1000).toTimeString().slice(0, 5);
-    const scheduledAd = scheduledAds.find((ad) => {
-      const adTime = ad.slot_time.slice(0, 5);
-      return adTime <= currentTimeStr && adTime >= graceStartStr;
-    });
+    // An unplayed ad whose slot started in the last 2 minutes
+    const scheduledAd = findDueAd(scheduledAds, now);
 
     if (scheduledAd && scheduledAd.ad) {
       setCurrentContent(scheduledAd.ad);
@@ -224,9 +233,7 @@ export default function TVDisplay() {
 
       // Mark as played
       supabase
-        .from("ad_schedule")
-        .update({ played_at: now.toISOString() })
-        .eq("id", scheduledAd.id)
+        .rpc("mark_ad_played", { _schedule_id: scheduledAd.id })
         .then(({ error }) => {
           if (error) {
             console.error("Error marking ad as played:", error);
@@ -253,6 +260,16 @@ export default function TVDisplay() {
     return () => clearInterval(interval);
   }, [checkAndPlayAd]);
 
+  // Fetch the next image ahead of time so the switch doesn't flash
+  useEffect(() => {
+    if (defaultContent.length < 2) return;
+    const next = defaultContent[(defaultContentIndex + 1) % defaultContent.length];
+    if (next?.content_type === "image") {
+      const img = new Image();
+      img.src = next.content_url;
+    }
+  }, [defaultContent, defaultContentIndex]);
+
   // Rotate default content every 30 seconds when not playing ads
   useEffect(() => {
     if (isPlaying) return;
@@ -263,6 +280,16 @@ export default function TVDisplay() {
     }
     return () => clearInterval(interval);
   }, [isPlaying, playDefaultContent, currentContent, defaultContent]);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  };
+
+  const nextAd = scheduledAds.find((ad) => ad.slot_time.slice(0, 5) >= format(currentTime, "HH:mm"));
 
   // Render content based on type
   const renderContent = () => {
@@ -280,6 +307,15 @@ export default function TVDisplay() {
               ? "Sign in with a store owner account, or set up your store in the dashboard"
               : "Add content in your store dashboard"}
           </p>
+          {noStore && (
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="mt-8 rounded-lg border border-border px-6 py-3 tv-body hover:bg-secondary/50"
+            >
+              Sign out
+            </button>
+          )}
         </div>
       );
     }
@@ -308,7 +344,7 @@ export default function TVDisplay() {
       if (videoId) {
         return (
           <iframe
-            src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
             className="w-full h-full"
             title={currentContent.title || "YouTube video"}
             allow="autoplay; encrypted-media"
@@ -341,7 +377,7 @@ export default function TVDisplay() {
   }
 
   return (
-    <div className="dark tv-display relative overflow-hidden cursor-none">
+    <div className={`dark tv-display relative overflow-hidden ${currentContent ? "cursor-none" : ""}`} onDoubleClick={toggleFullscreen}>
       {/* Main Content Area */}
       <div className="absolute inset-0">
         {renderContent()}
@@ -384,12 +420,20 @@ export default function TVDisplay() {
         </div>
       </div>
 
+      {!isOnline && (
+        <div className="absolute bottom-6 left-6 glass-card px-4 py-3 flex items-center gap-3">
+          <div className="w-3 h-3 rounded-full bg-destructive" />
+          <span className="text-sm">Offline: new bookings will appear when the connection is back</span>
+        </div>
+      )}
+
       {/* Upcoming Ads Indicator */}
       {scheduledAds.length > 0 && (
         <div className="absolute bottom-6 right-6 glass-card px-4 py-3 flex items-center gap-3">
           <div className="w-3 h-3 rounded-full bg-accent animate-pulse" />
           <span className="text-sm">
             {scheduledAds.length} ad{scheduledAds.length !== 1 ? "s" : ""} scheduled today
+            {nextAd && ` · next at ${format(parse(nextAd.slot_time, "HH:mm:ss", currentTime), "h:mm a")}`}
           </span>
         </div>
       )}

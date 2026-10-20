@@ -1,10 +1,26 @@
 # AdStation
 
+[![CI](https://github.com/rvarada-p/tv-tube-streamer/actions/workflows/ci.yml/badge.svg)](https://github.com/rvarada-p/tv-tube-streamer/actions/workflows/ci.yml)
+
 AdStation puts sponsor ads and a store's own content on the TV screens inside local stores.
 
 - **Stores** sign up, describe their store and opening hours, upload default content (images, videos, YouTube links) and see the day's ad schedule.
 - **Ad sponsors** sign up and set up their company.
 - **The TV** signs in at `/tv/login` with the store's account and plays the store's default content in rotation, switching to scheduled ads at their slot time.
+
+## Setting up a store TV
+
+1. Use any screen with a modern browser: a smart TV browser, a Fire TV / Android TV stick, a Chromecast with Google TV, or a small PC.
+2. Open `<your site>/tv/login` and sign in with the **store owner's** account.
+3. Optional: in Chrome or on Android, choose **Install app** / **Add to Home screen**. AdStation then opens straight on the TV display, full screen.
+4. Otherwise, double-click the screen (or press OK twice on an air remote) to go fullscreen.
+5. The display keeps the screen awake by itself where the device allows it. Also turn off the TV's own sleep timer.
+
+On the screen:
+
+- **"N ads scheduled today · next at …"** (bottom right): today's remaining sponsor ads.
+- **"Offline"** (bottom left): the connection dropped. Content keeps playing; new bookings arrive when it's back.
+- **"No Store on This Account"**: you signed in with a sponsor account or before finishing store setup. Use **Sign out**.
 
 ## Tech stack
 
@@ -34,6 +50,15 @@ The Supabase connection comes from `.env`:
 | `VITE_SUPABASE_PROJECT_ID` | The Supabase project id |
 
 The database schema lives in `supabase/migrations/`.
+
+## Database
+
+The schema, row-level security policies and storage bucket are defined in `supabase/migrations/`, applied in file-name order.
+
+- **To change the schema**, add a new migration file (`YYYYMMDDHHMMSS_what_it_does.sql`). Never edit one that has already run.
+- **Applying them:** changes made through Lovable are applied for you. A migration added straight to this repo may need to be run once in the Supabase SQL editor.
+- **Store bank details** are not readable through the API. Select named columns from `stores`, never `*`.
+- **Plays are recorded** with `supabase.rpc("mark_ad_played", { _schedule_id })`. The TV can't update `ad_schedule` directly.
 
 ## Scripts
 
