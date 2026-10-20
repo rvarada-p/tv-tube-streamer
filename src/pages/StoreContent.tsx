@@ -319,7 +319,10 @@ export default function StoreContent() {
     if (item.content_type !== "youtube" && item.content_url.includes("store-content")) {
       const path = item.content_url.split("store-content/")[1];
       if (path) {
-        await supabase.storage.from("store-content").remove([path]);
+        const { error: storageError } = await supabase.storage.from("store-content").remove([path]);
+        if (storageError) {
+          console.error("Error removing file from storage:", storageError);
+        }
       }
     }
 
