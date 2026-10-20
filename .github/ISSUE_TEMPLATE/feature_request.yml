@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest something new for AdStation
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is it for?
+      options: [Store owners, Ad sponsors, The TV display, Everyone]
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to happen?
