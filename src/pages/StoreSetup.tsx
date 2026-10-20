@@ -272,12 +272,12 @@ export default function StoreSetup() {
                   {AD_CATEGORIES.map((category) => (
                     <div key={category.value} className="flex items-center space-x-2">
                       <Checkbox
-                        id={category.value}
+                        id={`ad-category-${category.value}`}
                         checked={formData.adCategories.includes(category.value)}
                         onCheckedChange={() => handleCategoryToggle(category.value)}
                       />
                       <label
-                        htmlFor={category.value}
+                        htmlFor={`ad-category-${category.value}`}
                         className="text-sm cursor-pointer"
                       >
                         {category.label}
