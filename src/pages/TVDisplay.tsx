@@ -308,7 +308,7 @@ export default function TVDisplay() {
       if (videoId) {
         return (
           <iframe
-            src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`}
             className="w-full h-full"
             title={currentContent.title || "YouTube video"}
             allow="autoplay; encrypted-media"
