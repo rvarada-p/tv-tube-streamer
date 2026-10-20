@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ interface Store {
 export default function StoreContent() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  useDocumentTitle("Default content");
   const { toast } = useToast();
   
   const [store, setStore] = useState<Store | null>(null);
@@ -319,7 +321,10 @@ export default function StoreContent() {
     if (item.content_type !== "youtube" && item.content_url.includes("store-content")) {
       const path = item.content_url.split("store-content/")[1];
       if (path) {
-        await supabase.storage.from("store-content").remove([path]);
+        const { error: storageError } = await supabase.storage.from("store-content").remove([path]);
+        if (storageError) {
+          console.error("Error removing file from storage:", storageError);
+        }
       }
     }
 
