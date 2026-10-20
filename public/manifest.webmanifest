@@ -1,0 +1,10 @@
+{
+  "name": "AdStation",
+  "short_name": "AdStation",
+  "description": "TV advertising for local stores",
+  "start_url": "/tv",
+  "display": "fullscreen",
+  "background_color": "#0b0d12",
+  "theme_color": "#7c3aed",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
