@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { format, parse } from "date-fns";
 import { slotTimes } from "@/lib/schedule";
-import { Clock, Tv, ArrowLeft, Play, CheckCircle } from "lucide-react";
+import { Clock, Tv, ArrowLeft, Play, CheckCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Store {
@@ -28,7 +29,7 @@ interface ScheduledAd {
   ads: {
     title: string;
     category: string;
-    duration_seconds: number;
+    duration_seconds: number | null;
     content_type: string;
   } | null;
 }
@@ -41,26 +42,30 @@ interface TimeSlot {
 
 const StoreSchedule = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  useDocumentTitle("Ad schedule");
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   
   const [store, setStore] = useState<Store | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [scheduledAds, setScheduledAds] = useState<ScheduledAd[]>([]);
+  const [loadingAds, setLoadingAds] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/auth", { state: { from: location.pathname } });
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, location.pathname]);
 
   const fetchStore = useCallback(async () => {
+    if (!user) return;
     try {
       const { data, error } = await supabase
         .from("stores")
         .select("id, store_name, opening_time, closing_time")
-        .eq("user_id", user?.id)
+        .eq("user_id", user.id)
         .maybeSingle();
 
       if (error) throw error;
@@ -99,7 +104,8 @@ const StoreSchedule = () => {
     // Ignore responses for a date the user has already moved away from.
     let cancelled = false;
 
-    const fetchScheduledAds = async () => {
+    const fetchScheduledAds = async (showSpinner = true) => {
+      if (showSpinner) setLoadingAds(true);
       const dateStr = format(selectedDate, "yyyy-MM-dd");
       const { data, error } = await supabase
         .from("ad_schedule")
@@ -120,6 +126,7 @@ const StoreSchedule = () => {
         .order("slot_time");
 
       if (cancelled) return;
+      setLoadingAds(false);
 
       if (error) {
         console.error("Error fetching scheduled ads:", error);
@@ -136,8 +143,19 @@ const StoreSchedule = () => {
 
     fetchScheduledAds();
 
+    // Show bookings and plays as they happen
+    const channel = supabase
+      .channel(`schedule-page-${store.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ad_schedule", filter: `store_id=eq.${store.id}` },
+        () => fetchScheduledAds(false)
+      )
+      .subscribe();
+
     return () => {
       cancelled = true;
+      supabase.removeChannel(channel);
     };
   }, [store, selectedDate, toast]);
 
@@ -317,12 +335,13 @@ const StoreSchedule = () => {
                                   {slot.ad.ads.category}
                                 </Badge>
                                 <Badge variant="outline" className="text-xs">
-                                  {slot.ad.ads.duration_seconds}s
+                                  {slot.ad.ads.duration_seconds ?? 15}s
                                 </Badge>
                               </div>
                               {slot.ad.played_at && (
                                 <p className="text-xs text-green-600">
-                                  ✓ Played at {format(new Date(slot.ad.played_at), "h:mm a")}
+                                  <CheckCircle className="inline h-3 w-3 mr-1" />
+                                  Played at {format(new Date(slot.ad.played_at), "h:mm a")}
                                 </p>
                               )}
                             </div>
@@ -346,7 +365,11 @@ const StoreSchedule = () => {
             <CardDescription>All ads scheduled for the selected date</CardDescription>
           </CardHeader>
           <CardContent>
-            {scheduledAds.length === 0 ? (
+            {loadingAds ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : scheduledAds.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Tv className="h-10 w-10 mx-auto mb-3 opacity-50" />
                 <p>No ads scheduled for this date</p>

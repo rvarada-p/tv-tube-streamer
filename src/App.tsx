@@ -17,6 +17,7 @@ const StoreContent = lazy(() => import("./pages/StoreContent"));
 const StoreSchedule = lazy(() => import("./pages/StoreSchedule"));
 const SponsorSetup = lazy(() => import("./pages/SponsorSetup"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ const App = () => (
             {/* Public Routes */}
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             
             {/* TV Display Routes */}
             <Route path="/tv/login" element={<TVLogin />} />
