@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +29,7 @@ interface ScheduledAd {
   ads: {
     title: string;
     category: string;
-    duration_seconds: number;
+    duration_seconds: number | null;
     content_type: string;
   } | null;
 }
@@ -41,6 +42,8 @@ interface TimeSlot {
 
 const StoreSchedule = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  useDocumentTitle("Ad schedule");
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   
@@ -51,16 +54,17 @@ const StoreSchedule = () => {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/auth", { state: { from: location.pathname } });
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, location.pathname]);
 
   const fetchStore = useCallback(async () => {
+    if (!user) return;
     try {
       const { data, error } = await supabase
         .from("stores")
         .select("id, store_name, opening_time, closing_time")
-        .eq("user_id", user?.id)
+        .eq("user_id", user.id)
         .maybeSingle();
 
       if (error) throw error;
@@ -317,7 +321,7 @@ const StoreSchedule = () => {
                                   {slot.ad.ads.category}
                                 </Badge>
                                 <Badge variant="outline" className="text-xs">
-                                  {slot.ad.ads.duration_seconds}s
+                                  {slot.ad.ads.duration_seconds ?? 15}s
                                 </Badge>
                               </div>
                               {slot.ad.played_at && (
